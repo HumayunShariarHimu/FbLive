@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="bn-BD">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FacebookLive</title>
+<style>
+body, html {
+    margin: 0;
+    padding: 0;
+    background-color: #000;
+    font-family: Arial, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+}
+
+video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background-color: #000;
+}
+
+/* Top overlay */
+.top-overlay {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    z-index: 10;
+}
+
+.live-label {
+    background-color: red;
+    color: white;
+    font-weight: bold;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.view-counter {
+    background-color: rgba(50,50,50,0.7);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 13px;
+}
+
+.camera-switch {
+    background-color: rgba(0,0,0,0.5);
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+/* Bottom overlay */
+.bottom-overlay {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    z-index: 10;
+}
+
+.comment-input {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background-color: rgba(0,0,0,0.5);
+    border-radius: 20px;
+    padding: 5px 10px;
+}
+
+.comment-input input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: white;
+    font-size: 14px;
+}
+
+.comment-input button {
+    background: none;
+    border: none;
+    color: #1877f2;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.reaction-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.reaction-buttons button {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.reaction-buttons button:hover {
+    transform: scale(1.2);
+}
+
+/* Floating reactions */
+.floating-reaction {
+    position: absolute;
+    font-size: 24px;
+    z-index: 5;
+    pointer-events: none;
+    animation: floatUp 2s forwards;
+}
+
+@keyframes floatUp {
+    0% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+    100% { opacity: 0; transform: translateY(-250px) scale(1.5) rotate(30deg); }
+}
+
+/* Comment feed */
+.comment-feed {
+    position: absolute;
+    bottom: 70px;
+    left: 10px;
+    width: calc(100% - 20px);
+    max-height: 50%;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 5px;
+    overflow: hidden;
+    z-index: 10;
+}
+
+.comment {
+    display: flex;
+    align-items: center;
+    background-color: rgba(0,0,0,0.6);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 15px;
+    max-width: 80%;
+    animation: slideUp 25s linear forwards;
+}
+
+.comment img {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+@keyframes slideUp {
+    0% { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(-300px); opacity: 0; }
+}
+</style>
+</head>
+<body>
+
+<video id="webcam" autoplay playsinline></video>
+
+<div class="top-overlay">
+    <div class="live-label">LIVE</div>
+    <div class="view-counter" id="views">14K</div>
+    <button class="camera-switch" id="switchCamera">Switch Camera</button>
+</div>
+
+<div class="bottom-overlay">
+    <div class="comment-input">
+        <input type="text" id="commentText" placeholder="Comment...">
+        <button id="sendComment">Send</button>
+    </div>
+    <div class="reaction-buttons">
+        <button data-reaction="❤️">❤️</button>
+        <button data-reaction="👍">👍</button>
+        <button data-reaction="😮">😮</button>
+        <button data-reaction="😂">😂</button>
+        <button data-reaction="😢">😢</button>
+        <button data-reaction="😡">😡</button>
+        <button data-reaction="👏">👏</button>
+    </div>
+</div>
+
+<div class="comment-feed" id="commentFeed"></div>
+
+<script>
+const video = document.getElementById('webcam');
+const viewsCounter = document.getElementById('views');
+const reactionButtons = document.querySelectorAll('.reaction-buttons button');
+const body = document.body;
+const commentText = document.getElementById('commentText');
+const sendComment = document.getElementById('sendComment');
+const switchCamera = document.getElementById('switchCamera');
+const commentFeed = document.getElementById('commentFeed');
+
+let views = 14000;
+let currentStream;
+let usingFrontCamera = true;
+
+// Random user data
+const users = [
+    {name:"Mohammad", pic:"https://i.pravatar.cc/150?img=10"},
+    {name:"Karim", pic:"https://i.pravatar.cc/150?img=11"},
+    {name:"Shanoto", pic:"https://i.pravatar.cc/150?img=12"},
+    {name:"Ruma", pic:"https://i.pravatar.cc/150?img=13"},
+    {name:"Humayun", pic:"https://i.pravatar.cc/150?img=14"},
+    {name:"Md Kabir", pic:"https://i.pravatar.cc/150?img=15"}
+];
+
+const demoComments = [
+    "সবাই লাইভে আসেন!","লাইভ শেয়ার করছি","😂😂","দেখছি","লাইভ!","ভিডিও কোথায় হচ্ছে?","🔥🔥","মজা লাগছে!"
+];
+
+const demoReactions = ["❤️","👍","😮","😂","😢","😡","👏"];
+
+// Start webcam
+async function startWebcam() {
+    if(currentStream) currentStream.getTracks().forEach(track => track.stop());
+    const constraints = {video:{facingMode:usingFrontCamera?"user":"environment"}, audio:false};
+    try {
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = currentStream;
+    } catch(err){
+        alert('Cannot access webcam: '+err);
+    }
+}
+
+// Switch camera
+switchCamera.addEventListener('click', () => { 
+    usingFrontCamera = !usingFrontCamera; 
+    startWebcam(); 
+});
+
+// Floating reactions
+function addReaction(reaction){
+    const floatEl = document.createElement('div');
+    floatEl.className='floating-reaction';
+    floatEl.textContent=reaction;
+    // Random position from middle to right
+    floatEl.style.left = `${Math.random() * (window.innerWidth/2) + window.innerWidth/2}px`;
+    floatEl.style.bottom = `${Math.random() * 150 + 30}px`;
+    const scale = Math.random() * 0.5 + 1;
+    const rotate = Math.random() * 60 - 30;
+    floatEl.style.transform = `scale(${scale}) rotate(${rotate}deg)`;
+    const duration = Math.random() * 1 + 1.5;
+    floatEl.style.animation = `floatUp ${duration}s forwards`;
+    body.appendChild(floatEl);
+    setTimeout(() => floatEl.remove(), duration * 1000);
+}
+
+// Add comment with profile picture
+function addComment(text, user){
+    const div = document.createElement('div');
+    div.className = 'comment';
+    div.innerHTML = `<img src="${user.pic}" alt="${user.name}"/> <strong>${user.name}:</strong> ${text}`;
+    commentFeed.appendChild(div);
+    setTimeout(()=>div.remove(), 25000); // 25s
+}
+
+// Reaction click
+reactionButtons.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+        addReaction(btn.dataset.reaction);
+        views++;
+        viewsCounter.textContent=views.toLocaleString();
+    });
+});
+
+// Comment send
+sendComment.addEventListener('click', ()=>{
+    const text = commentText.value.trim();
+    if(text){
+        const user = users[Math.floor(Math.random()*users.length)];
+        addComment(text, user);
+        commentText.value='';
+        views++;
+        viewsCounter.textContent=views.toLocaleString();
+    }
+});
+
+// Auto demo reactions & comments
+setInterval(()=>{
+    const rc = Math.floor(Math.random() * 5) + 3;
+    for(let i=0;i<rc;i++){
+        const reaction = demoReactions[Math.floor(Math.random()*demoReactions.length)];
+        addReaction(reaction);
+        views++;
+    }
+    const cc = Math.floor(Math.random() * 2) + 1;
+    for(let i=0;i<cc;i++){
+        const comment = demoComments[Math.floor(Math.random()*demoComments.length)];
+        const user = users[Math.floor(Math.random()*users.length)];
+        addComment(comment, user);
+        views++;
+    }
+    viewsCounter.textContent = views.toLocaleString();
+}, 1500);
+
+startWebcam();
+</script>
+
+</body>
+</html>
